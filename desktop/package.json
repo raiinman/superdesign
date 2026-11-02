@@ -1,0 +1,20 @@
+{
+  "name": "superdesign-personal",
+  "productName": "Superdesign Personal",
+  "version": "0.1.0",
+  "description": "A personal, local design canvas for HTML and SVG iterations",
+  "main": "main.cjs",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test tests/*.test.cjs",
+    "package": "electron-packager . Superdesign-Personal --platform=win32 --arch=x64 --out=release --overwrite --asar --ignore=release --ignore=tests --ignore=evidence",
+    "test:ui": "node tests/ui.cjs"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "electron": "45.2.1",
+    "playwright": "1.64.1"
+  }
+}

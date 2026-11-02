@@ -1,0 +1,47 @@
+const { _electron: electron } = require('playwright');
+const fs = require('node:fs/promises'); const path = require('node:path'); const assert = require('node:assert/strict');
+const root = path.resolve(__dirname, '..');
+const home = path.join(require('node:os').tmpdir(), 'superdesign-personal-qa-' + Date.now());
+(async () => {
+  const evidence = path.join(root, 'evidence'); await fs.mkdir(evidence, { recursive: true });
+  const packaged = process.env.SUPERDESIGN_PACKAGED === '1';
+  const app = await electron.launch({ executablePath: root + (packaged ? '/release/Superdesign-Personal-win32-x64/Superdesign-Personal.exe' : '/node_modules/electron/dist/electron.exe'), args: packaged ? [] : [root], env: { ...process.env, SUPERDESIGN_HEADLESS: '1', SUPERDESIGN_TEST_HOME: home }, timeout: 60000 });
+  try {
+    const page = await app.firstWindow(); const errors = []; page.on('pageerror', error => errors.push(error.message));
+    await page.waitForSelector('.design-card'); await page.waitForTimeout(700); assert.equal(await page.locator('.design-card').count(), 2);
+    await page.screenshot({ path: evidence + '/canvas-desktop.png' });
+    await page.locator('[data-viewport="mobile"]').click(); await page.waitForTimeout(300); assert.equal(await page.locator('.mobile-frame').count(), 2);
+    await page.screenshot({ path: evidence + '/canvas-mobile-previews.png' });
+    await page.locator('[data-viewport="desktop"]').click();
+    await page.locator('#search').fill('no-such-design'); assert.equal(await page.locator('.design-card').count(), 0); await page.locator('#search').fill('');
+    await page.locator('.design-card').first().dblclick(); await page.waitForSelector('#editor-dialog[open]');
+    const original = await page.locator('#code-editor').inputValue(); await page.locator('#code-editor').fill(original.replace('your creative space', 'a saved local direction'));
+    await page.locator('#save-code').click(); await page.waitForFunction(() => document.querySelector('#editor-status').textContent.startsWith('Saved locally'));
+    await page.screenshot({ path: evidence + '/source-editor.png' }); await page.locator('#close-editor').click();
+    await page.locator('.design-card').first().hover(); await page.locator('.design-card [data-action="duplicate"]').first().click(); await page.waitForFunction(() => document.querySelectorAll('.design-card').length === 3);
+    await page.locator('#brief').fill('Try an editorial red and cream direction.'); await page.locator('#brief-button').click();
+    await page.waitForFunction(() => document.querySelector('#toast').textContent.startsWith('Brief saved'));
+    const prompt = await app.evaluate(({ clipboard }) => clipboard.readText()); assert.match(prompt, /editorial red and cream/);
+    await page.locator('#new-project').click(); await page.locator('#dialog-name').fill('QA local project'); await page.locator('#dialog-submit').click(); await page.waitForFunction(() => document.querySelector('#project-name').textContent.includes('QA local project'));
+    await page.locator('#new-draft').click(); await page.locator('#dialog-name').fill('My starter'); await page.locator('#draft-kind').selectOption('website'); await page.locator('#dialog-submit').click(); await page.waitForSelector('.design-card');
+    const projectRoot = path.join(home, 'Superdesign Personal', 'qa-local-project');
+    await fs.writeFile(path.join(projectRoot, '.superdesign/design_iterations', 'from-codex.html'), '<!doctype html><title>External update</title><h1>Appeared from Codex</h1>');
+    await page.waitForFunction(() => document.querySelectorAll('.design-card').length === 2);
+    const input = path.join(home, 'imported.svg'); await fs.writeFile(input, '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"><rect width="200" height="100" fill="#b74837"/></svg>');
+    await app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }); }, input);
+    await page.locator('#import-button').click(); await page.waitForFunction(() => document.querySelectorAll('.design-card').length === 3);
+    const exported = path.join(home, 'exported.html'); await app.evaluate(({ dialog }, file) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: file }); }, exported);
+    await page.locator('.design-card').first().hover(); await page.locator('.design-card [data-action="export"]').first().click(); await page.waitForFunction(() => document.querySelector('#toast').textContent === 'Design exported.'); assert.ok((await fs.readFile(exported, 'utf8')).length > 10);
+    const blocked = await page.evaluate(() => fetch('https://example.com').then(() => false, () => true)); assert.equal(blocked, true);
+    const nodeHidden = await page.evaluate(() => typeof window.require === 'undefined' && typeof window.process === 'undefined'); assert.equal(nodeHidden, true);
+    const initialProject = await page.locator('.project-item').first(); await initialProject.click(); await page.waitForFunction(() => document.querySelector('#project-name').textContent.startsWith('Fieldnotes'));
+    await page.screenshot({ path: evidence + '/canvas-final.png' }); assert.deepEqual(errors, []);
+    await page.locator('.design-card').first().dblclick(); await page.waitForSelector('#editor-dialog[open]');
+    await page.locator('#code-editor').fill((await page.locator('#code-editor').inputValue()) + '\n<!-- unsaved test -->');
+    await app.evaluate(({ dialog, BrowserWindow }) => { dialog.showMessageBoxSync = () => 0; BrowserWindow.getAllWindows()[0].close(); });
+    await page.waitForTimeout(400); assert.equal(await page.locator('#editor-dialog').getAttribute('open'), '');
+    await app.evaluate(({ dialog }) => { dialog.showMessageBoxSync = () => 1; });
+    await fs.writeFile(evidence + '/ui-verification.json', JSON.stringify({ packaged, home, checks: ['seeded projects','desktop and mobile previews','search','source edit/save','duplicate','brief clipboard and disk','create project','starter draft','external file watcher','SVG import with native dialog stub','HTML export with native dialog stub','network blocked','Node hidden','no page errors'], errors }, null, 2));
+    console.log('PASS: native Electron UI, local persistence, import/export, file watching, offline boundaries and unsaved-close protection');
+  } finally { await app.close(); }
+})().catch(error => { console.error(error); process.exitCode = 1; });
