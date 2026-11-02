@@ -5,7 +5,8 @@ const home = path.join(require('node:os').tmpdir(), 'superdesign-personal-qa-' +
 (async () => {
   const evidence = path.join(root, 'evidence'); await fs.mkdir(evidence, { recursive: true });
   const packaged = process.env.SUPERDESIGN_PACKAGED === '1';
-  const app = await electron.launch({ executablePath: root + (packaged ? '/release/Superdesign-Personal-win32-x64/Superdesign-Personal.exe' : '/node_modules/electron/dist/electron.exe'), args: packaged ? [] : [root], env: { ...process.env, SUPERDESIGN_HEADLESS: '1', SUPERDESIGN_TEST_HOME: home }, timeout: 60000 });
+  const executablePath = process.env.SUPERDESIGN_EXECUTABLE || root + (packaged ? '/release/Superdesign-Personal-win32-x64/Superdesign-Personal.exe' : '/node_modules/electron/dist/electron.exe');
+  const app = await electron.launch({ executablePath, args: packaged ? [] : [root], env: { ...process.env, SUPERDESIGN_HEADLESS: '1', SUPERDESIGN_TEST_HOME: home }, timeout: 60000 });
   try {
     const page = await app.firstWindow(); const errors = []; page.on('pageerror', error => errors.push(error.message));
     await page.waitForSelector('.design-card'); await page.waitForTimeout(700); assert.equal(await page.locator('.design-card').count(), 2);
