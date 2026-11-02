@@ -6,7 +6,8 @@ const home = path.join(require('node:os').tmpdir(), 'superdesign-personal-qa-' +
   const evidence = path.join(root, 'evidence'); await fs.mkdir(evidence, { recursive: true });
   const packaged = process.env.SUPERDESIGN_PACKAGED === '1';
   const executablePath = process.env.SUPERDESIGN_EXECUTABLE || root + (packaged ? '/release/Superdesign-Personal-win32-x64/Superdesign-Personal.exe' : '/node_modules/electron/dist/electron.exe');
-  const app = await electron.launch({ executablePath, args: packaged ? [] : [root], env: { ...process.env, SUPERDESIGN_HEADLESS: '1', SUPERDESIGN_TEST_HOME: home }, timeout: 60000 });
+  const launchOptions = { executablePath, args: packaged ? [] : [root], env: { ...process.env, SUPERDESIGN_HEADLESS: '1', SUPERDESIGN_TEST_HOME: home }, timeout: 60000 };
+  const app = await electron.launch(launchOptions);
   try {
     const page = await app.firstWindow(); const errors = []; page.on('pageerror', error => errors.push(error.message));
     await page.waitForSelector('.design-card'); await page.waitForTimeout(700); assert.equal(await page.locator('.design-card').count(), 2);
@@ -36,13 +37,53 @@ const home = path.join(require('node:os').tmpdir(), 'superdesign-personal-qa-' +
     const blocked = await page.evaluate(() => fetch('https://example.com').then(() => false, () => true)); assert.equal(blocked, true);
     const nodeHidden = await page.evaluate(() => typeof window.require === 'undefined' && typeof window.process === 'undefined'); assert.equal(nodeHidden, true);
     const initialProject = await page.locator('.project-item').first(); await initialProject.click(); await page.waitForFunction(() => document.querySelector('#project-name').textContent.startsWith('Fieldnotes'));
+    await page.locator('#library-button').click(); await page.waitForSelector('.example-card'); assert.equal(await page.locator('.example-card').count(), 10);
+    await page.waitForTimeout(5600); await page.screenshot({ path: evidence + '/example-library.png' });
+    await page.locator('[data-category="Commerce"]').click(); assert.equal(await page.locator('.example-card').count(), 1);
+    await page.locator('.example-preview').click(); await page.waitForSelector('#viewer-dialog[open]');
+    await page.locator('[data-view-viewport="mobile"]').click(); await page.waitForTimeout(150);
+    assert.equal(await page.locator('#viewer-content iframe').evaluate(el => el.style.width), '390px');
+    await page.screenshot({ path: evidence + '/example-focused-mobile.png' });
+    await page.locator('#viewer-use').click(); await page.waitForSelector('.design-card'); assert.equal(await page.locator('.design-card').count(), 4);
+    await page.locator('[data-viewport="desktop"]').click();
+    await page.locator('.favorite-button').first().click(); await page.waitForFunction(() => document.querySelector('#favorite-count').textContent === '1');
+    await page.locator('#favorites-button').click(); assert.equal(await page.locator('.design-card').count(), 1);
+    await page.locator('#all-projects').click(); assert.equal(await page.locator('.design-card').count(), 4);
+    await page.locator('.compare-pick').nth(0).click(); await page.locator('.compare-pick').nth(1).click(); await page.locator('#compare-button').click();
+    await page.waitForSelector('#viewer-dialog[open]'); assert.equal(await page.locator('#viewer-content iframe').count(), 2);
+    await page.screenshot({ path: evidence + '/design-comparison.png' }); await page.locator('#close-viewer').click();
+    await page.locator('#list-tab').click(); assert.equal(await page.locator('.canvas-world.is-list').count(), 1);
+    await page.locator('#sort-designs').selectOption('recent'); await page.screenshot({ path: evidence + '/design-list.png' });
+    await page.locator('#rename-project').click(); await page.locator('#dialog-name').fill('Fieldnotes Studio'); await page.locator('#dialog-submit').click();
+    await page.waitForFunction(() => document.querySelector('#project-name').textContent.startsWith('Fieldnotes Studio'));
+    await page.locator('#canvas-tab').click(); await page.locator('[data-viewport="tablet"]').click();
+    await page.locator('#zoom-in').click(); await page.waitForTimeout(200);
+    const prefs = JSON.parse(await fs.readFile(path.join(home, 'preferences.json'), 'utf8')); assert.equal(prefs.viewport, 'tablet'); assert.equal(prefs.sort, 'recent'); assert.ok(prefs.zoom > 1);
+    await page.locator('[data-viewport="desktop"]').click(); await page.locator('#zoom-label').click();
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1050, 760)); await page.waitForTimeout(200);
+    assert.equal(await page.evaluate(() => document.body.scrollWidth <= window.innerWidth), true);
+    await page.screenshot({ path: evidence + '/compact-window.png' });
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1480, 940)); await page.waitForTimeout(200);
     await page.screenshot({ path: evidence + '/canvas-final.png' }); assert.deepEqual(errors, []);
+    await page.locator('.project-item').nth(1).click(); await page.waitForFunction(() => document.querySelector('#project-name').textContent.startsWith('QA local project'));
+    await page.locator('#list-tab').click(); await page.locator('[data-viewport="mobile"]').click(); await page.waitForTimeout(200);
     await page.locator('.design-card').first().dblclick(); await page.waitForSelector('#editor-dialog[open]');
     await page.locator('#code-editor').fill((await page.locator('#code-editor').inputValue()) + '\n<!-- unsaved test -->');
     await app.evaluate(({ dialog, BrowserWindow }) => { dialog.showMessageBoxSync = () => 0; BrowserWindow.getAllWindows()[0].close(); });
     await page.waitForTimeout(400); assert.equal(await page.locator('#editor-dialog').getAttribute('open'), '');
     await app.evaluate(({ dialog }) => { dialog.showMessageBoxSync = () => 1; });
-    await fs.writeFile(evidence + '/ui-verification.json', JSON.stringify({ packaged, home, checks: ['seeded projects','desktop and mobile previews','search','source edit/save','duplicate','brief clipboard and disk','create project','starter draft','external file watcher','SVG import with native dialog stub','HTML export with native dialog stub','network blocked','Node hidden','no page errors'], errors }, null, 2));
-    console.log('PASS: native Electron UI, local persistence, import/export, file watching, offline boundaries and unsaved-close protection');
+    await fs.writeFile(evidence + '/ui-verification.json', JSON.stringify({ packaged, executablePath, home, checks: ['seeded projects','desktop and mobile previews','search','source edit/save','duplicate','brief clipboard and disk','create project','starter draft','external file watcher','SVG import with native dialog stub','HTML export with native dialog stub','ten-example library','category filtering','focused mobile preview','example insertion','favorite and starred filter','side-by-side comparison','list view','recent sorting','project rename','saved preferences','compact window without body overflow','network blocked','Node hidden','unsaved-close protection','no page errors'], errors }, null, 2));
+    console.log('PASS: native Electron UI, ten-example library, comparison, favorites, saved preferences, file workflows and offline boundaries');
   } finally { await app.close(); }
+  const reopened = await electron.launch(launchOptions);
+  try {
+    const page = await reopened.firstWindow(); await page.waitForSelector('.design-card');
+    assert.match(await page.locator('#project-name').textContent(), /QA local project/);
+    assert.equal(await page.locator('.canvas-world.is-list').count(), 1);
+    assert.match(await page.locator('[data-viewport="mobile"]').getAttribute('class'), /active/);
+    assert.equal(await page.locator('#sort-designs').inputValue(), 'recent');
+    const report = JSON.parse(await fs.readFile(evidence + '/ui-verification.json', 'utf8')); report.checks.push('selected project, list view, mobile viewport and sorting restored after native app restart');
+    await fs.writeFile(evidence + '/ui-verification.json', JSON.stringify(report, null, 2));
+    console.log('PASS: workspace restored after a native application restart');
+  } finally { await reopened.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

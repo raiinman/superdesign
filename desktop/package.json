@@ -1,7 +1,7 @@
 {
   "name": "superdesign-personal",
   "productName": "Superdesign Personal",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A personal, local design canvas for HTML and SVG iterations",
   "main": "main.cjs",
   "private": true,

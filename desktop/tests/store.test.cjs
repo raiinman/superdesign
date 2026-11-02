@@ -30,3 +30,26 @@ test('external drafts are discovered and briefs are saved locally', async t => {
   const brief = await s.brief(p.id, 'Try a red editorial layout.');
   assert.match(await fs.readFile(brief.file, 'utf8'), /Try a red editorial layout/); assert.match(brief.prompt, /No Superdesign service/);
 });
+test('concurrent stars persist without changing either draft', async t => {
+  const s = await fixture(t); const p = await s.create('Favorites');
+  const a = await s.createDraft(p.id, 'One', '<h1>One</h1>'); const b = await s.createDraft(p.id, 'Two', '<h1>Two</h1>');
+  await Promise.all([s.setFavorite(p.id, a.name, true), s.setFavorite(p.id, b.name, true)]);
+  const reopened = await new Store(s.home, s.projectsHome).init(); const list = await reopened.list(p.id);
+  assert.equal(list.filter(d => d.favorite).length, 2); assert.equal((await s.read(p.id, a.name)).html, '<h1>One</h1>');
+  await s.setFavorite(p.id, a.name, false); assert.equal((await s.list(p.id)).filter(d => d.favorite).length, 1);
+  await assert.rejects(s.setFavorite(p.id, b.name, 'yes'), /Invalid favorite/);
+});
+test('workspace preferences merge concurrently and project renaming keeps files in place', async t => {
+  const s = await fixture(t); const p = await s.create('Original name'); const d = await s.createDraft(p.id, 'Page', 'kept'); const originalRoot = p.root;
+  await Promise.all([s.savePreferences({ viewport: 'tablet', view: 'list' }), s.savePreferences({ zoom: 1.2, sort: 'recent', currentProject: p.id })]);
+  await s.renameProject(p.id, 'A better name'); const reopened = await new Store(s.home, s.projectsHome).init();
+  assert.equal(reopened.projects[0].name, 'A better name'); assert.equal(reopened.projects[0].root, originalRoot); assert.equal((await reopened.read(p.id, d.name)).html, 'kept');
+  const prefs = await reopened.preferences(); assert.equal(prefs.viewport, 'tablet'); assert.equal(prefs.zoom, 1.2); assert.equal(prefs.view, 'list');
+  for (const invalid of [{ zoom: 4 }, { viewport: 'giant' }, { currentProject: 'unknown' }, { command: 'run' }]) await assert.rejects(s.savePreferences(invalid), /Invalid preference/);
+});
+test('the example library provides ten self-contained documents and rejects unknown ids', () => {
+  const { catalogue, example } = require('../gallery.cjs'); const all = catalogue();
+  assert.equal(all.length, 10); assert.equal(new Set(all.map(e => e.id)).size, 10);
+  for (const entry of all) { assert.match(entry.html, /<!doctype html>/i); assert.match(entry.html, /name="viewport"/); assert.doesNotMatch(entry.html, /<(?:script|link)[^>]*(?:src|href)\s*=\s*["']https?:/i); assert.equal(example(entry.id).html, entry.html); }
+  assert.throws(() => example('not-real'), /Example not found/);
+});

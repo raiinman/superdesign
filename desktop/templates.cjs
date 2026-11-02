@@ -11,4 +11,4 @@ function starter(title, kind) {
   if (kind === 'dashboard') return dashboard(title);
   return base(title, `<main><div>YOUR NEXT DIRECTION</div><h1>${esc(title)}</h1><p>Start with a clear idea. Make every detail belong.</p></main>`, 'main{max-width:1000px;margin:auto;padding:100px 8%}main>div{font:11px monospace;letter-spacing:2px;color:#9d4232}h1{font:normal clamp(40px,8vw,84px)/1.1 Georgia;letter-spacing:-2px;margin:30px 0}p{color:#77796b}');
 }
-module.exports = { starter, demos: () => [['Fieldnotes · Workspace', dashboard()], ['Fieldnotes · A fresh perspective', website()]] };
+module.exports = { starter, base, esc, demos: () => [['Fieldnotes · Workspace', dashboard()], ['Fieldnotes · A fresh perspective', website()]] };

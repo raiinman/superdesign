@@ -2,6 +2,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args);
 contextBridge.exposeInMainWorld('studio', {
   load: () => invoke('studio:load'), select: id => invoke('studio:select', id),
+  library: () => invoke('studio:library'), useExample: (id, example) => invoke('studio:example', id, example),
+  favorite: (id, name, value) => invoke('studio:favorite', id, name, value), preferences: patch => invoke('studio:preferences', patch),
+  renameProject: (id, name) => invoke('studio:rename-project', id, name),
   createProject: name => invoke('studio:create-project', name), openProject: () => invoke('studio:open-project'),
   openFolder: id => invoke('studio:open-folder', id), importDraft: id => invoke('studio:import', id),
   createDraft: (id, title, kind) => invoke('studio:create-draft', id, title, kind),
