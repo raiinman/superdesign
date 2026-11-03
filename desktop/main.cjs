@@ -2,6 +2,8 @@ const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, session } = requi
 const fs = require('node:fs/promises'); const path = require('node:path'); const watch = require('node:fs').watch;
 const { Store } = require('./store.cjs'); const { starter, demos } = require('./templates.cjs');
 const { catalogue, example } = require('./gallery.cjs');
+const { Assistants } = require('./assistants.cjs');
+const assistants = new Assistants();
 let win, store, current, watcher, debounce;
 const dataHome = process.env.SUPERDESIGN_TEST_HOME;
 if (dataHome) app.setPath('userData', path.join(dataHome, 'app-data'));
@@ -53,6 +55,14 @@ else {
       handle('import', async id => { const d = await dialog.showOpenDialog(win, { properties: ['openFile', 'multiSelections'], filters: [{ name: 'Design files', extensions: ['html', 'htm', 'svg'] }] }); if (d.canceled) return null; for (const file of d.filePaths) { const stat = await fs.stat(file); if (stat.size > 8 * 1024 * 1024) throw new Error('Imported draft is larger than 8 MB'); await store.createDraft(id, path.parse(file).name, await fs.readFile(file, 'utf8'), path.extname(file).toLowerCase() === '.svg' ? '.svg' : '.html'); } return state(); });
       handle('export', async (id, name) => { const d = await store.read(id, name); const choice = await dialog.showSaveDialog(win, { defaultPath: name, filters: [{ name: 'Design file', extensions: [path.extname(name).slice(1)] }] }); if (choice.canceled) return false; await fs.writeFile(choice.filePath, d.html); return true; });
       handle('brief', async (id, text) => { const result = await store.brief(id, text); clipboard.writeText(result.prompt); return { file: result.file }; });
+      handle('assistants', () => assistants.list());
+      handle('open-assistant', async (id, provider, text) => {
+        if (!['codex', 'chatgpt', 'claude', 'gemini'].includes(provider)) throw new Error('Unknown assistant');
+        const result = await store.brief(id, text);
+        clipboard.writeText(result.prompt);
+        const opened = await assistants.open(provider, store.project(id).root, result.file);
+        return { ...opened, file: result.file };
+      });
       handle('copy', text => { if (typeof text !== 'string' || text.length > 9 * 1024 * 1024) throw new Error('Invalid clipboard text'); clipboard.writeText(text); });
       handle('window', action => { if (action === 'minimize') win.minimize(); else if (action === 'maximize') win.isMaximized() ? win.unmaximize() : win.maximize(); else if (action === 'close') win.close(); });
       win.once('ready-to-show', () => { if (!process.env.SUPERDESIGN_HEADLESS) win.show(); });

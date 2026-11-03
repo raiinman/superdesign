@@ -137,7 +137,7 @@ class Store {
     text = validText(text, 20000, 'brief'); const p = this.project(projectId);
     const file = path.join(p.root, '.superdesign', 'briefs', `${Date.now()}-${id()}.md`);
     await fs.mkdir(path.dirname(file), { recursive: true });
-    const prompt = `Use the local $superdesign skill.\n\nProject: ${p.root}\nSave self-contained HTML or SVG variants in: ${this.folder(p)}\nNo Superdesign service, cloud canvas, external assets or paid generation.\n\n${text}\n`;
+    const prompt = `Use the local $superdesign skill if available. Create a self-contained HTML or SVG design with inline CSS and embedded assets. If you cannot write local files, return the complete design as a downloadable HTML or SVG file for import into Superdesign Personal.\n\nProject: ${p.root}\nSave self-contained HTML or SVG variants in: ${this.folder(p)}\nUse the existing assistant account. No Superdesign service, hosted canvas, external assets or separate generation service.\n\n${text}\n`;
     await fs.writeFile(file, prompt, { flag: 'wx' }); return { file, prompt };
   }
 }

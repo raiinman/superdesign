@@ -1,12 +1,12 @@
 # Superdesign Personal
 
-A standalone Windows design canvas inspired by the original Superdesign IDE extension. No Superdesign account, hosted canvas, API key, provider SDK or model service is used by this app. It makes no outbound requests at runtime.
+A standalone Windows design canvas inspired by the original Superdesign IDE extension. No Superdesign account, hosted canvas or provider SDK is required. The canvas and previews make no outbound requests. Assistant clients launched explicitly by you use their own accounts and network connections.
 
 Run `npm install`, `npx install-electron`, then `npm start` (Node 22.12 or newer). Run `npm run package` to build the portable Windows application under `release/Superdesign-Personal-win32-x64/`. Launch `Superdesign-Personal.exe` from that folder; keep its accompanying files together.
 
-The app stores projects as normal local folders under Documents/Superdesign Personal. Open another project folder to watch its `.superdesign/design_iterations` directory. It imports HTML/SVG copies, watches external edits, creates local starter templates, edits source with preview, duplicates iterations, exports original source, and saves briefs for Codex or Claude. Previous editor saves are retained in `.superdesign/history`. Drafts modified externally are protected from stale editor overwrites.
+The app stores projects as normal local folders under Documents/Superdesign Personal. Open another project folder to watch its `.superdesign/design_iterations` directory. It imports HTML/SVG copies, watches external edits, creates local starter templates, edits source with preview, duplicates iterations, exports original source, and saves project briefs for Codex, ChatGPT, Claude or Gemini. Previous editor saves are retained in `.superdesign/history`. Drafts modified externally are protected from stale editor overwrites.
 
-Codex and Claude use the local `superdesign` skill to author designs in the watched folder. The app does not run an AI model or pretend its starter templates are AI generation. A coding assistant's own model/network requirements are separate from this local app.
+Codex and Claude can use the local `superdesign` skill to author designs in the watched folder. The app does not run an AI model or pretend its starter templates are AI generation. A coding assistant's own model/network requirements are separate from this local app.
 
 Previews disable scripts and remote resources. Use self-contained HTML with inline CSS, SVG and data images; external assets are not downloaded or embedded automatically. Imported source and exported files are preserved without the preview restrictions. The desktop application blocks HTTP, HTTPS and WebSocket requests, denies permissions, and does not expose Node APIs to designs.
 
@@ -37,3 +37,19 @@ Existing 0.1 project registries and design files are retained. The app never ins
 ![Ten-example local library](docs/example-library.png)
 
 ![Two designs compared side by side](docs/comparison.png)
+
+## Personal assistants (0.3)
+
+Choose an assistant in the brief composer and press the arrow. The app saves a project brief and copies its complete contents before requesting the client launch. It never reads authentication tokens or changes client permissions.
+
+- **Codex:** opens the installed Codex CLI in a visible project terminal, with a short instruction to read the saved brief. Existing sign-in, local skills, sandbox and approval settings apply.
+- **Claude:** opens the installed Claude Code CLI in the project terminal with the same file-based brief. Claude handles sign-in, project trust and permissions itself. Desktop Claude authentication does not imply CLI authentication.
+- **ChatGPT:** opens the registered ChatGPT desktop app, with the brief on your clipboard. Paste it there. If the client cannot write the project folder, download its complete HTML or SVG output and use Import design.
+- **Gemini:** opens the registered Gemini desktop app with the same clipboard/file handoff. It does not install Gemini CLI, access browser tokens, or claim that a Google subscription grants API access.
+- **Save & copy only:** keeps the original manual workflow without launching another app.
+
+The status line reports CLI installation or Windows app registration, not provider authentication. Refresh retries detection. A successful launch request does not establish model access or generation success. Only files saved in the watched directory appear automatically; desktop handoff results need importing. Account usage limits and any charges are controlled by each selected client. The app itself stays local and stores briefs under `.superdesign/briefs`.
+
+Detection uses the user's standard Codex and Claude installation paths and the registered Windows application IDs on this machine. Unknown provider IDs and missing clients are rejected. Terminal launches use a fixed PowerShell executable, encoded arguments and literal path quoting, with no permission bypass flags. CLI prompts reference a saved file rather than interpolating the user's design text into shell code.
+
+Validation includes adapter detection/error tests, a real PowerShell special-character/cwd test, and all four UI handoff routes with process launches replaced by a recorder. Model generation, desktop sign-in and live client completion are separate from those automated checks.

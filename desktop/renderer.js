@@ -196,7 +196,35 @@ document.querySelectorAll('[data-viewport]').forEach(button => button.onclick = 
 function setZoom(value) { zoom = Math.max(.5, Math.min(1.5, value)); $('#zoom-label').textContent = Math.round(zoom * 100) + '%'; $('#canvas-world').style.zoom = view === 'list' ? 1 : zoom; persist({ zoom }); }
 $('#zoom-in').onclick = () => setZoom(zoom + .1); $('#zoom-out').onclick = () => setZoom(zoom - .1); $('#zoom-label').onclick = () => setZoom(1);
 $('#help-button').onclick = () => $('#help-dialog').showModal(); $('#close-help').onclick = () => $('#help-dialog').close();
-$('#brief-button').onclick = () => action(async () => { const text = $('#brief').value.trim(); if (!text) { $('#brief').focus(); toast('Write a little about the direction you want to explore.'); return; } await window.studio.brief(state.current, text); $('#brief').value = ''; toast('Brief saved and copied. Paste it into Codex or Claude.'); });
+let assistants = [];
+function assistantStatus() {
+  const id = $('#assistant').value, client = assistants.find(c => c.id === id);
+  $('#assistant-status').textContent = client ? `${client.status}. ${client.detail}` : 'Save a brief, then paste it into your coding assistant.';
+  $('#brief-button').title = $('#brief-button').ariaLabel = client ? `Save brief and open ${client.name}` : 'Save and copy design brief';
+}
+async function refreshAssistants() {
+  $('#refresh-assistants').disabled = true;
+  try {
+    assistants = await window.studio.assistants();
+    for (const client of assistants) $('#assistant').querySelector(`[value="${client.id}"]`).textContent = `${client.name}${client.available ? '' : ' (unavailable)'}`;
+    assistantStatus();
+  } finally { $('#refresh-assistants').disabled = false; }
+}
+$('#assistant').onchange = assistantStatus;
+$('#refresh-assistants').onclick = () => action(refreshAssistants);
+$('#brief-button').onclick = () => action(async () => {
+  const text = $('#brief').value.trim();
+  if (!text) { $('#brief').focus(); toast('Write a little about the direction you want to explore.'); return; }
+  const button = $('#brief-button'); button.disabled = true;
+  try {
+    if ($('#assistant').value === 'copy') { await window.studio.brief(state.current, text); toast('Brief saved and copied. Paste it into your assistant.'); }
+    else {
+      const result = await window.studio.openAssistant(state.current, $('#assistant').value, text);
+      toast(result.kind === 'terminal' ? `Brief saved. ${result.name} project terminal requested.` : `Brief saved and copied. Paste it in ${result.name}, then import the design.`);
+    }
+    $('#brief').value = '';
+  } finally { button.disabled = false; }
+});
 document.querySelectorAll('[data-window]').forEach(button => button.onclick = () => window.studio.window(button.dataset.window));
 document.addEventListener('keydown', event => {
   if (!(event.ctrlKey || event.metaKey)) return;
@@ -208,4 +236,4 @@ document.addEventListener('keydown', event => {
 window.studio.onChanged(() => { if (!refreshPending) { refreshPending = true; action(async () => { try { accept(await window.studio.load()); } finally { refreshPending = false; } }); } });
 window.addEventListener('beforeunload', event => { if (editor && $('#code-editor').value !== editor.savedHtml) { event.preventDefault(); event.returnValue = ''; } });
 $('.main').insertBefore($('.brief-box'), $('.canvas-footer'));
-action(async () => { library = await window.studio.library(); accept(await window.studio.load()); });
+action(async () => { library = await window.studio.library(); accept(await window.studio.load()); await refreshAssistants(); });

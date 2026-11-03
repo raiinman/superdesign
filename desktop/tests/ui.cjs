@@ -24,6 +24,30 @@ const home = path.join(require('node:os').tmpdir(), 'superdesign-personal-qa-' +
     await page.locator('#brief').fill('Try an editorial red and cream direction.'); await page.locator('#brief-button').click();
     await page.waitForFunction(() => document.querySelector('#toast').textContent.startsWith('Brief saved'));
     const prompt = await app.evaluate(({ clipboard }) => clipboard.readText()); assert.match(prompt, /editorial red and cream/);
+    await page.waitForFunction(() => document.querySelector('#assistant option[value="gemini"]').textContent === 'Gemini');
+    assert.equal(await page.locator('#assistant option').count(), 5);
+    // Exercise the IPC and saved briefs without launching the user's assistants during QA.
+    await app.evaluate(({ app }) => {
+      const { Assistants } = process.mainModule.require(app.getAppPath() + '/assistants.cjs');
+      global.assistantLaunches = [];
+      Assistants.prototype.open = async function(id, root, file) {
+        global.assistantLaunches.push({ id, root, file });
+        return { name: this.clients.find(c => c.id === id).name, kind: ['codex', 'claude'].includes(id) ? 'terminal' : 'desktop' };
+      };
+    });
+    for (const id of ['codex', 'chatgpt', 'claude', 'gemini']) {
+      await page.locator('#assistant').selectOption(id);
+      await page.locator('#brief').fill(`QA design for ${id}`);
+      await page.locator('#brief-button').click();
+      await page.waitForFunction(() => document.querySelector('#brief').value === '' && !document.querySelector('#brief-button').disabled);
+      const launch = await app.evaluate(() => global.assistantLaunches.at(-1));
+      assert.equal(launch.id, id); assert.ok(launch.root.includes('fieldnotes'));
+      assert.match(await fs.readFile(launch.file, 'utf8'), new RegExp(`QA design for ${id}`));
+      assert.match(await app.evaluate(({ clipboard }) => clipboard.readText()), new RegExp(`QA design for ${id}`));
+    }
+    await page.screenshot({ path: evidence + '/assistant-connections.png' });
+    await page.locator('#assistant').selectOption('copy');
+
     await page.locator('#new-project').click(); await page.locator('#dialog-name').fill('QA local project'); await page.locator('#dialog-submit').click(); await page.waitForFunction(() => document.querySelector('#project-name').textContent.includes('QA local project'));
     await page.locator('#new-draft').click(); await page.locator('#dialog-name').fill('My starter'); await page.locator('#draft-kind').selectOption('website'); await page.locator('#dialog-submit').click(); await page.waitForSelector('.design-card');
     const projectRoot = path.join(home, 'Superdesign Personal', 'qa-local-project');
@@ -72,7 +96,7 @@ const home = path.join(require('node:os').tmpdir(), 'superdesign-personal-qa-' +
     await app.evaluate(({ dialog, BrowserWindow }) => { dialog.showMessageBoxSync = () => 0; BrowserWindow.getAllWindows()[0].close(); });
     await page.waitForTimeout(400); assert.equal(await page.locator('#editor-dialog').getAttribute('open'), '');
     await app.evaluate(({ dialog }) => { dialog.showMessageBoxSync = () => 1; });
-    await fs.writeFile(evidence + '/ui-verification.json', JSON.stringify({ packaged, executablePath, home, checks: ['seeded projects','desktop and mobile previews','search','source edit/save','duplicate','brief clipboard and disk','create project','starter draft','external file watcher','SVG import with native dialog stub','HTML export with native dialog stub','ten-example library','category filtering','focused mobile preview','example insertion','favorite and starred filter','side-by-side comparison','list view','recent sorting','project rename','saved preferences','compact window without body overflow','network blocked','Node hidden','unsaved-close protection','no page errors'], errors }, null, 2));
+    await fs.writeFile(evidence + '/ui-verification.json', JSON.stringify({ packaged, executablePath, home, checks: ['seeded projects','desktop and mobile previews','search','source edit/save','duplicate','brief clipboard and disk', 'four assistant choices and saved handoff routes (launch recorder)','create project','starter draft','external file watcher','SVG import with native dialog stub','HTML export with native dialog stub','ten-example library','category filtering','focused mobile preview','example insertion','favorite and starred filter','side-by-side comparison','list view','recent sorting','project rename','saved preferences','compact window without body overflow','network blocked','Node hidden','unsaved-close protection','no page errors'], errors }, null, 2));
     console.log('PASS: native Electron UI, ten-example library, comparison, favorites, saved preferences, file workflows and offline boundaries');
   } finally { await app.close(); }
   const reopened = await electron.launch(launchOptions);
